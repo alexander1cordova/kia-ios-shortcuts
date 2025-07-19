@@ -1,5 +1,4 @@
 import os
-import time
 from flask import Flask, request, jsonify
 from hyundai_kia_connect_api import VehicleManager, ClimateRequestOptions
 from hyundai_kia_connect_api.exceptions import AuthenticationError
@@ -71,7 +70,6 @@ def vehicle_status():
             engine = vs.get('engine', None)
             locked = vs.get('doorLock', None)
             odometer = vs.get('odometer', {}).get('value', None)
-            # date = rpt.get('reportDate', {}).get('utc', None)  # ELIMINADO
 
             status = {
                 "locked": locked,
@@ -99,8 +97,10 @@ def vehicle_status():
         print(status)
         return jsonify(status), 200
     except Exception as e:
-        print(f"Error in /vehicle_status: {e}")
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /vehicle_status:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
 
 @app.route('/start_climate', methods=['POST'])
 def start_climate():
@@ -116,7 +116,10 @@ def start_climate():
         result = vehicle_manager.start_climate(VEHICLE_ID, climate_options)
         return jsonify({"status": "Climate started", "result": result}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /start_climate:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
 
 @app.route('/stop_climate', methods=['POST'])
 def stop_climate():
@@ -128,7 +131,10 @@ def stop_climate():
         result = vehicle_manager.stop_climate(VEHICLE_ID)
         return jsonify({"status": "Climate stopped", "result": result}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /stop_climate:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
 
 @app.route('/unlock_car', methods=['POST'])
 def unlock_car():
@@ -140,7 +146,10 @@ def unlock_car():
         result = vehicle_manager.unlock(VEHICLE_ID)
         return jsonify({"status": "Car unlocked", "result": result}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /unlock_car:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
 
 @app.route('/lock_car', methods=['POST'])
 def lock_car():
@@ -152,7 +161,10 @@ def lock_car():
         result = vehicle_manager.lock(VEHICLE_ID)
         return jsonify({"status": "Car locked", "result": result}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /lock_car:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
 
 @app.route('/open_trunk', methods=['POST'])
 def open_trunk():
@@ -160,17 +172,19 @@ def open_trunk():
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
 
+    results = []
     try:
-        results = []
+        # Envía tres señales de unlock seguidas (¡sin delay!)
         for i in range(3):
             result = vehicle_manager.unlock(VEHICLE_ID)
             results.append(result)
             print(f"Unlock command {i+1} sent.")
-            time.sleep(1)
-        return jsonify({"status": "Trunk opening command sent (triple unlock)", "results": results}), 200
+        return jsonify({"status": "Trunk opening command sent (triple unlock, no delay)", "results": results}), 200
     except Exception as e:
-        print(f"Error in /open_trunk: {e}")
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /open_trunk:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
 
 @app.route('/start_heating', methods=['POST'])
 def start_heating():
@@ -186,8 +200,10 @@ def start_heating():
         result = vehicle_manager.start_climate(VEHICLE_ID, climate_options)
         return jsonify({"status": "Heating started (80°F)", "result": result}), 200
     except Exception as e:
-        print(f"Error in /start_heating: {e}")
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /start_heating:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
 
 if __name__ == "__main__":
     print("Starting Kia Vehicle Control API...")
