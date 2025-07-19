@@ -9,9 +9,11 @@ app = Flask(__name__)
 USERNAME = os.environ.get('KIA_USERNAME')
 PASSWORD = os.environ.get('KIA_PASSWORD')
 PIN = os.environ.get('KIA_PIN')
+SECRET_KEY = os.environ.get("SECRET_KEY")
+VEHICLE_ID = os.environ.get("VEHICLE_ID")
 
-if USERNAME is None or PASSWORD is None or PIN is None:
-    raise ValueError("Missing credentials! Check your environment variables.")
+if not USERNAME or not PASSWORD or not PIN or not SECRET_KEY:
+    raise ValueError("Missing one or more required environment variables.")
 
 # Initialize Vehicle Manager
 vehicle_manager = VehicleManager(
@@ -22,7 +24,6 @@ vehicle_manager = VehicleManager(
     pin=str(PIN)
 )
 
-# Refresh the token and update vehicle states
 try:
     print("Attempting to authenticate and refresh token...")
     vehicle_manager.check_and_refresh_token()
@@ -37,26 +38,16 @@ except Exception as e:
     print(f"Unexpected error during initialization: {e}")
     exit(1)
 
-# Secret key for security - moved to environment variables
-SECRET_KEY = os.environ.get("SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("Missing SECRET_KEY environment variable.")
-
-# Dynamically fetch the first vehicle ID if VEHICLE_ID is not set
-VEHICLE_ID = os.environ.get("VEHICLE_ID")
 if not VEHICLE_ID:
     if not vehicle_manager.vehicles:
         raise ValueError("No vehicles found in the account. Please ensure your Kia account has at least one vehicle.")
-    # Fetch the first vehicle ID
     VEHICLE_ID = next(iter(vehicle_manager.vehicles.keys()))
     print(f"No VEHICLE_ID provided. Using the first vehicle found: {VEHICLE_ID}")
 
-# Log incoming requests
 @app.before_request
 def log_request_info():
     print(f"Incoming request: {request.method} {request.url}")
 
-# Root endpoint
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({"status": "Welcome to the Kia Vehicle Control API"}), 200
@@ -75,13 +66,12 @@ def list_vehicles():
         vehicle_manager.update_all_vehicles_with_cached_state()
 
         vehicles = vehicle_manager.vehicles
-        print(f"Vehicles data: {vehicles}")  # Log the vehicles data
+        print(f"Vehicles data: {vehicles}")
 
         if not vehicles:
             print("No vehicles found in the account")
             return jsonify({"error": "No vehicles found"}), 404
 
-        # Iterate over the dictionary values (Vehicle objects)
         vehicle_list = [
             {
                 "name": v.name,
@@ -89,7 +79,7 @@ def list_vehicles():
                 "model": v.model,
                 "year": v.year
             }
-            for v in vehicles.values()  # Use .values() to get the Vehicle objects
+            for v in vehicles.values()
         ]
 
         if not vehicle_list:
@@ -100,6 +90,36 @@ def list_vehicles():
         return jsonify({"status": "Success", "vehicles": vehicle_list}), 200
     except Exception as e:
         print(f"Error in /list_vehicles: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Vehicle status endpoint
+@app.route('/vehicle_status', methods=['GET'])
+def vehicle_status():
+    print("Received request to /vehicle_status")
+
+    if request.headers.get("Authorization") != SECRET_KEY:
+        print("Unauthorized request: Missing or incorrect Authorization header")
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        print("Refreshing vehicle states...")
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        vehicle = vehicle_manager.vehicles[VEHICLE_ID]
+
+        status = {
+            "engineOn": getattr(vehicle, "engine_is_running", None),
+            "locked": getattr(vehicle, "is_locked", None),
+            "climateOn": getattr(vehicle, "is_climate_on", None),
+            "temperature": getattr(vehicle, "climate_temperature", None),
+            "battery": getattr(vehicle, "battery_percentage", None),
+            "fuelLevel": getattr(vehicle, "fuel_level", None),
+            "rangeMiles": getattr(vehicle, "range_miles", None),
+            "lastUpdated": getattr(vehicle, "last_updated_at", None).isoformat() if getattr(vehicle, "last_updated_at", None) else None
+        }
+        print(f"Vehicle status: {status}")
+        return jsonify(status), 200
+    except Exception as e:
+        print(f"Error in /vehicle_status: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Start climate endpoint
@@ -115,13 +135,11 @@ def start_climate():
         print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
 
-        # Create ClimateRequestOptions object
         climate_options = ClimateRequestOptions(
             set_temp=63,  # Set temperature in Fahrenheit
             duration=10   # Duration in minutes
         )
 
-        # Start climate control using the VehicleManager's start_climate method
         result = vehicle_manager.start_climate(VEHICLE_ID, climate_options)
         print(f"Start climate result: {result}")
 
@@ -143,7 +161,6 @@ def stop_climate():
         print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
 
-        # Stop climate control using the VehicleManager's stop_climate method
         result = vehicle_manager.stop_climate(VEHICLE_ID)
         print(f"Stop climate result: {result}")
 
@@ -165,7 +182,6 @@ def unlock_car():
         print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
 
-        # Unlock the vehicle using the VehicleManager's unlock method
         result = vehicle_manager.unlock(VEHICLE_ID)
         print(f"Unlock result: {result}")
 
@@ -187,7 +203,6 @@ def lock_car():
         print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
 
-        # Lock the vehicle using the VehicleManager's lock method
         result = vehicle_manager.lock(VEHICLE_ID)
         print(f"Lock result: {result}")
 
