@@ -92,7 +92,7 @@ def list_vehicles():
         print(f"Error in /list_vehicles: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Vehicle status endpoint
+# Vehicle status endpoint (MODIFIED)
 @app.route('/vehicle_status', methods=['GET'])
 def vehicle_status():
     print("Received request to /vehicle_status")
@@ -106,16 +106,28 @@ def vehicle_status():
         vehicle_manager.update_all_vehicles_with_cached_state()
         vehicle = vehicle_manager.vehicles[VEHICLE_ID]
 
+        engine_on = getattr(vehicle, "engine_is_running", None)
+        locked = getattr(vehicle, "is_locked", None)
+        climate_on = getattr(vehicle, "is_climate_on", None)
+        fuel_level = getattr(vehicle, "fuel_level", None)
+        range_miles = getattr(vehicle, "range_miles", None)
+        last_updated = getattr(vehicle, "last_updated_at", None).isoformat() if getattr(vehicle, "last_updated_at", None) else None
+
+        # Try different attribute names for temperature info, as library versions vary!
+        interior_temp = getattr(vehicle, "cabin_temperature", None) or getattr(vehicle, "interior_temperature", None)
+        ac_set_temp = getattr(vehicle, "climate_temperature", None) or getattr(vehicle, "ac_temperature_set", None)
+
         status = {
-            "engineOn": getattr(vehicle, "engine_is_running", None),
-            "locked": getattr(vehicle, "is_locked", None),
-            "climateOn": getattr(vehicle, "is_climate_on", None),
-            "temperature": getattr(vehicle, "climate_temperature", None),
-            "battery": getattr(vehicle, "battery_percentage", None),
-            "fuelLevel": getattr(vehicle, "fuel_level", None),
-            "rangeMiles": getattr(vehicle, "range_miles", None),
-            "lastUpdated": getattr(vehicle, "last_updated_at", None).isoformat() if getattr(vehicle, "last_updated_at", None) else None
+            "engineOn": engine_on,
+            "locked": locked,
+            "climateOn": climate_on,
+            "interiorTemperature": interior_temp,     # Current cabin temperature (if available)
+            "acSetTemperature": ac_set_temp,          # Target A/C set temperature
+            "fuelLevel": fuel_level,                  # Fuel %
+            "rangeMiles": range_miles,                # Remaining miles
+            "lastUpdated": last_updated
         }
+
         print(f"Vehicle status: {status}")
         return jsonify(status), 200
     except Exception as e:
