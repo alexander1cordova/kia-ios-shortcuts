@@ -5,7 +5,6 @@ from hyundai_kia_connect_api.exceptions import AuthenticationError
 
 app = Flask(__name__)
 
-# Get credentials from environment variables
 USERNAME = os.environ.get('KIA_USERNAME')
 PASSWORD = os.environ.get('KIA_PASSWORD')
 PIN = os.environ.get('KIA_PIN')
@@ -15,10 +14,9 @@ VEHICLE_ID = os.environ.get("VEHICLE_ID")
 if not USERNAME or not PASSWORD or not PIN or not SECRET_KEY:
     raise ValueError("Missing one or more required environment variables.")
 
-# Initialize Vehicle Manager
 vehicle_manager = VehicleManager(
-    region=3,  # North America region
-    brand=1,   # KIA brand
+    region=3,  # North America
+    brand=1,   # KIA
     username=USERNAME,
     password=PASSWORD,
     pin=str(PIN)
@@ -52,26 +50,13 @@ def log_request_info():
 def root():
     return jsonify({"status": "Welcome to the Kia Vehicle Control API"}), 200
 
-# List vehicles endpoint
 @app.route('/list_vehicles', methods=['GET'])
 def list_vehicles():
-    print("Received request to /list_vehicles")
-
     if request.headers.get("Authorization") != SECRET_KEY:
-        print("Unauthorized request: Missing or incorrect Authorization header")
         return jsonify({"error": "Unauthorized"}), 403
-
     try:
-        print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
-
         vehicles = vehicle_manager.vehicles
-        print(f"Vehicles data: {vehicles}")
-
-        if not vehicles:
-            print("No vehicles found in the account")
-            return jsonify({"error": "No vehicles found"}), 404
-
         vehicle_list = [
             {
                 "name": v.name,
@@ -81,172 +66,193 @@ def list_vehicles():
             }
             for v in vehicles.values()
         ]
-
-        if not vehicle_list:
-            print("No valid vehicles found in the account")
-            return jsonify({"error": "No valid vehicles found"}), 404
-
-        print(f"Returning vehicle list: {vehicle_list}")
         return jsonify({"status": "Success", "vehicles": vehicle_list}), 200
     except Exception as e:
-        print(f"Error in /list_vehicles: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Vehicle status endpoint (ENGLISH, detailed)
 @app.route('/vehicle_status', methods=['GET'])
 def vehicle_status():
-    print("Received request to /vehicle_status")
-
     if request.headers.get("Authorization") != SECRET_KEY:
-        print("Unauthorized request: Missing or incorrect Authorization header")
         return jsonify({"error": "Unauthorized"}), 403
-
     try:
-        print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
         vehicle = vehicle_manager.vehicles[VEHICLE_ID]
 
-        engine_on = getattr(vehicle, "engine_is_running", None)
-        locked = getattr(vehicle, "is_locked", None)
-        climate_on = getattr(vehicle, "is_climate_on", None)
+        # Compatibilidad máxima de nombres de atributos
+        engine_on = getattr(vehicle, "engine_is_running", None) or getattr(vehicle, "engine", None)
+        locked = getattr(vehicle, "is_locked", None) or getattr(vehicle, "doorLock", None)
+        climate_on = getattr(vehicle, "is_climate_on", None) or getattr(vehicle, "airCtrlOn", None)
+        ac_set_temp = getattr(vehicle, "climate_temperature", None) or getattr(vehicle, "airTemp", None)
+        interior_temp = getattr(vehicle, "cabin_temperature", None) or getattr(vehicle, "insideTemp", None)
         fuel_level = getattr(vehicle, "fuel_level", None)
+        if not fuel_level and hasattr(vehicle, "fuelStatus"):
+            fuel_status = getattr(vehicle, "fuelStatus", None)
+            if fuel_status and isinstance(fuel_status, dict):
+                fuel_level = fuel_status.get("fuelLevel", None)
         range_miles = getattr(vehicle, "range_miles", None)
-        last_updated = getattr(vehicle, "last_updated_at", None).isoformat() if getattr(vehicle, "last_updated_at", None) else None
-
-        # Temperature fields (use whatever is available in your library)
-        interior_temp = getattr(vehicle, "cabin_temperature", None) or getattr(vehicle, "interior_temperature", None)
-        ac_set_temp = getattr(vehicle, "climate_temperature", None) or getattr(vehicle, "ac_temperature_set", None)
+        if not range_miles and hasattr(vehicle, "fuelStatus"):
+            fuel_status = getattr(vehicle, "fuelStatus", None)
+            if fuel_status and isinstance(fuel_status, dict):
+                range_miles = fuel_status.get("distance", None)
+        last_updated = getattr(vehicle, "last_updated_at", None) or getattr(vehicle, "lastStatusDate", None)
+        if last_updated:
+            last_updated = str(last_updated)
 
         status = {
             "engineOn": engine_on,
             "locked": locked,
             "climateOn": climate_on,
-            "interiorTemperature": interior_temp,     # Current cabin temperature
-            "acSetTemperature": ac_set_temp,          # Target A/C set temperature
-            "fuelLevel": fuel_level,                  # Fuel %
-            "rangeMiles": range_miles,                # Remaining miles
+            "acSetTemperature": ac_set_temp,
+            "interiorTemperature": interior_temp,
+            "fuelLevel": fuel_level,
+            "rangeMiles": range_miles,
             "lastUpdated": last_updated
         }
-
-        print(f"Vehicle status: {status}")
         return jsonify(status), 200
     except Exception as e:
-        print(f"Error in /vehicle_status: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Start climate endpoint
 @app.route('/start_climate', methods=['POST'])
 def start_climate():
-    print("Received request to /start_climate")
-
     if request.headers.get("Authorization") != SECRET_KEY:
-        print("Unauthorized request: Missing or incorrect Authorization header")
         return jsonify({"error": "Unauthorized"}), 403
-
     try:
-        print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
-
-        climate_options = ClimateRequestOptions(
-            set_temp=63,  # Set temperature in Fahrenheit
-            duration=10   # Duration in minutes
-        )
-
+        temp = request.json.get("set_temp", 63)
+        duration = request.json.get("duration", 10)
+        climate_options = ClimateRequestOptions(set_temp=temp, duration=duration)
         result = vehicle_manager.start_climate(VEHICLE_ID, climate_options)
-        print(f"Start climate result: {result}")
-
         return jsonify({"status": "Climate started", "result": result}), 200
     except Exception as e:
-        print(f"Error in /start_climate: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Stop climate endpoint
 @app.route('/stop_climate', methods=['POST'])
 def stop_climate():
-    print("Received request to /stop_climate")
-
     if request.headers.get("Authorization") != SECRET_KEY:
-        print("Unauthorized request: Missing or incorrect Authorization header")
         return jsonify({"error": "Unauthorized"}), 403
-
     try:
-        print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
-
         result = vehicle_manager.stop_climate(VEHICLE_ID)
-        print(f"Stop climate result: {result}")
-
         return jsonify({"status": "Climate stopped", "result": result}), 200
     except Exception as e:
-        print(f"Error in /stop_climate: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Start heating endpoint (set climate to 80°F)
 @app.route('/start_heating', methods=['POST'])
 def start_heating():
-    print("Received request to /start_heating")
-
     if request.headers.get("Authorization") != SECRET_KEY:
-        print("Unauthorized request: Missing or incorrect Authorization header")
         return jsonify({"error": "Unauthorized"}), 403
-
     try:
-        print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
-
-        heating_options = ClimateRequestOptions(
-            set_temp=80,  # 80°F for heating
-            duration=10.  # Duration in minutes
-        )
-
+        heating_options = ClimateRequestOptions(set_temp=80, duration=10)
         result = vehicle_manager.start_climate(VEHICLE_ID, heating_options)
-        print(f"Start heating result: {result}")
-
         return jsonify({"status": "Heating started (80°F)", "result": result}), 200
     except Exception as e:
-        print(f"Error in /start_heating: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Unlock car endpoint
-@app.route('/unlock_car', methods=['POST'])
-def unlock_car():
-    print("Received request to /unlock_car")
-
-    if request.headers.get("Authorization") != SECRET_KEY:
-        print("Unauthorized request: Missing or incorrect Authorization header")
-        return jsonify({"error": "Unauthorized"}), 403
-
-    try:
-        print("Refreshing vehicle states...")
-        vehicle_manager.update_all_vehicles_with_cached_state()
-
-        result = vehicle_manager.unlock(VEHICLE_ID)
-        print(f"Unlock result: {result}")
-
-        return jsonify({"status": "Car unlocked", "result": result}), 200
-    except Exception as e:
-        print(f"Error in /unlock_car: {e}")
-        return jsonify({"error": str(e)}), 500
-
-# Lock car endpoint
 @app.route('/lock_car', methods=['POST'])
 def lock_car():
-    print("Received request to /lock_car")
-
     if request.headers.get("Authorization") != SECRET_KEY:
-        print("Unauthorized request: Missing or incorrect Authorization header")
         return jsonify({"error": "Unauthorized"}), 403
-
     try:
-        print("Refreshing vehicle states...")
         vehicle_manager.update_all_vehicles_with_cached_state()
-
         result = vehicle_manager.lock(VEHICLE_ID)
-        print(f"Lock result: {result}")
-
         return jsonify({"status": "Car locked", "result": result}), 200
     except Exception as e:
-        print(f"Error in /lock_car: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/unlock_car', methods=['POST'])
+def unlock_car():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.unlock(VEHICLE_ID)
+        return jsonify({"status": "Car unlocked", "result": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/start_engine', methods=['POST'])
+def start_engine():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.start_engine(VEHICLE_ID)
+        return jsonify({"status": "Engine started", "result": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/stop_engine', methods=['POST'])
+def stop_engine():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.stop_engine(VEHICLE_ID)
+        return jsonify({"status": "Engine stopped", "result": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/open_trunk', methods=['POST'])
+def open_trunk():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.open_trunk(VEHICLE_ID)
+        return jsonify({"status": "Trunk opened", "result": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/close_trunk', methods=['POST'])
+def close_trunk():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.close_trunk(VEHICLE_ID)
+        return jsonify({"status": "Trunk closed", "result": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/honk_horn', methods=['POST'])
+def honk_horn():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.honk(VEHICLE_ID)
+        return jsonify({"status": "Horn honked", "result": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/flash_lights', methods=['POST'])
+def flash_lights():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.flash_lights(VEHICLE_ID)
+        return jsonify({"status": "Lights flashed", "result": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/find_vehicle', methods=['GET'])
+def find_vehicle():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        vehicle = vehicle_manager.vehicles[VEHICLE_ID]
+        if hasattr(vehicle, "location") and vehicle.location:
+            location = vehicle.location
+            return jsonify({"status": "Success", "location": location}), 200
+        elif hasattr(vehicle, "get_location"):
+            location = vehicle.get_location()
+            return jsonify({"status": "Success", "location": location}), 200
+        else:
+            return jsonify({"error": "Location not available"}), 404
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
