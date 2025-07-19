@@ -74,11 +74,14 @@ def list_vehicles():
 def vehicle_status():
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
+
     try:
         vehicle_manager.update_all_vehicles_with_cached_state()
         vehicle = vehicle_manager.vehicles[VEHICLE_ID]
 
-        # Compatibilidad máxima de nombres de atributos
+        # Print all attributes of the vehicle for debugging and mapping
+        print(vehicle.__dict__)
+
         engine_on = getattr(vehicle, "engine_is_running", None) or getattr(vehicle, "engine", None)
         locked = getattr(vehicle, "is_locked", None) or getattr(vehicle, "doorLock", None)
         climate_on = getattr(vehicle, "is_climate_on", None) or getattr(vehicle, "airCtrlOn", None)
