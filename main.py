@@ -1,4 +1,5 @@
 import os
+import time
 from flask import Flask, request, jsonify
 from hyundai_kia_connect_api import VehicleManager, ClimateRequestOptions
 from hyundai_kia_connect_api.exceptions import AuthenticationError
@@ -151,6 +152,26 @@ def lock_car():
         result = vehicle_manager.lock(VEHICLE_ID)
         return jsonify({"status": "Car locked", "result": result}), 200
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- ENDPOINT PARA ABRIR PUERTA TRASERA CON DESBLOQUEO TRIPLE ---
+@app.route('/open_trunk', methods=['POST'])
+def open_trunk():
+    print("Received request to /open_trunk")
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        # Enviar señal de desbloqueo tres veces con un pequeño delay
+        results = []
+        for i in range(3):
+            result = vehicle_manager.unlock(VEHICLE_ID)
+            results.append(result)
+            print(f"Unlock command {i+1} sent.")
+            time.sleep(1)  # 1 segundo entre comandos (ajusta si necesitas más/menos delay)
+        return jsonify({"status": "Trunk opening command sent (triple unlock)", "results": results}), 200
+    except Exception as e:
+        print(f"Error in /open_trunk: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
