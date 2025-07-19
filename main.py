@@ -92,7 +92,7 @@ def list_vehicles():
         print(f"Error in /list_vehicles: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Vehicle status endpoint (MODIFIED)
+# Vehicle status endpoint (ENGLISH, detailed)
 @app.route('/vehicle_status', methods=['GET'])
 def vehicle_status():
     print("Received request to /vehicle_status")
@@ -113,7 +113,7 @@ def vehicle_status():
         range_miles = getattr(vehicle, "range_miles", None)
         last_updated = getattr(vehicle, "last_updated_at", None).isoformat() if getattr(vehicle, "last_updated_at", None) else None
 
-        # Try different attribute names for temperature info, as library versions vary!
+        # Temperature fields (use whatever is available in your library)
         interior_temp = getattr(vehicle, "cabin_temperature", None) or getattr(vehicle, "interior_temperature", None)
         ac_set_temp = getattr(vehicle, "climate_temperature", None) or getattr(vehicle, "ac_temperature_set", None)
 
@@ -121,7 +121,7 @@ def vehicle_status():
             "engineOn": engine_on,
             "locked": locked,
             "climateOn": climate_on,
-            "interiorTemperature": interior_temp,     # Current cabin temperature (if available)
+            "interiorTemperature": interior_temp,     # Current cabin temperature
             "acSetTemperature": ac_set_temp,          # Target A/C set temperature
             "fuelLevel": fuel_level,                  # Fuel %
             "rangeMiles": range_miles,                # Remaining miles
@@ -179,6 +179,32 @@ def stop_climate():
         return jsonify({"status": "Climate stopped", "result": result}), 200
     except Exception as e:
         print(f"Error in /stop_climate: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Start heating endpoint (set climate to 80°F)
+@app.route('/start_heating', methods=['POST'])
+def start_heating():
+    print("Received request to /start_heating")
+
+    if request.headers.get("Authorization") != SECRET_KEY:
+        print("Unauthorized request: Missing or incorrect Authorization header")
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        print("Refreshing vehicle states...")
+        vehicle_manager.update_all_vehicles_with_cached_state()
+
+        heating_options = ClimateRequestOptions(
+            set_temp=80,  # 80°F for heating
+            duration=10.  # Duration in minutes
+        )
+
+        result = vehicle_manager.start_climate(VEHICLE_ID, heating_options)
+        print(f"Start heating result: {result}")
+
+        return jsonify({"status": "Heating started (80°F)", "result": result}), 200
+    except Exception as e:
+        print(f"Error in /start_heating: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Unlock car endpoint
