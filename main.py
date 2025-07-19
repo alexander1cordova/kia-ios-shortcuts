@@ -5,15 +5,17 @@ from hyundai_kia_connect_api.exceptions import AuthenticationError
 
 app = Flask(__name__)
 
+# Credenciales desde variables de entorno
 USERNAME = os.environ.get('KIA_USERNAME')
 PASSWORD = os.environ.get('KIA_PASSWORD')
 PIN = os.environ.get('KIA_PIN')
-SECRET_KEY = os.environ.get("SECRET_KEY")
+SECRET_KEY = os.environ.get('SECRET_KEY')
 VEHICLE_ID = os.environ.get("VEHICLE_ID")
 
 if not USERNAME or not PASSWORD or not PIN or not SECRET_KEY:
     raise ValueError("Missing one or more required environment variables.")
 
+# Inicializa el VehicleManager
 vehicle_manager = VehicleManager(
     region=3,  # North America
     brand=1,   # KIA
@@ -50,87 +52,77 @@ def log_request_info():
 def root():
     return jsonify({"status": "Welcome to the Kia Vehicle Control API"}), 200
 
-@app.route('/list_vehicles', methods=['GET'])
-def list_vehicles():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        vehicles = vehicle_manager.vehicles
-        vehicle_list = [
-            {
-                "name": v.name,
-                "id": v.id,
-                "model": v.model,
-                "year": v.year
-            }
-            for v in vehicles.values()
-        ]
-        return jsonify({"status": "Success", "vehicles": vehicle_list}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/vehicle_status', methods=['GET'])
 def vehicle_status():
+    print("Received request to /vehicle_status")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
 
     try:
         vehicle_manager.update_all_vehicles_with_cached_state()
         vehicle = vehicle_manager.vehicles[VEHICLE_ID]
-
-        # Print all attributes of the vehicle for debugging and mapping
-        print(vehicle.__dict__)
-
-        engine_on = getattr(vehicle, "engine_is_running", None) or getattr(vehicle, "engine", None)
-        locked = getattr(vehicle, "is_locked", None) or getattr(vehicle, "doorLock", None)
-        climate_on = getattr(vehicle, "is_climate_on", None) or getattr(vehicle, "airCtrlOn", None)
-        ac_set_temp = getattr(vehicle, "climate_temperature", None) or getattr(vehicle, "airTemp", None)
-        interior_temp = getattr(vehicle, "cabin_temperature", None) or getattr(vehicle, "insideTemp", None)
-        fuel_level = getattr(vehicle, "fuel_level", None)
-        if not fuel_level and hasattr(vehicle, "fuelStatus"):
-            fuel_status = getattr(vehicle, "fuelStatus", None)
-            if fuel_status and isinstance(fuel_status, dict):
-                fuel_level = fuel_status.get("fuelLevel", None)
-        range_miles = getattr(vehicle, "range_miles", None)
-        if not range_miles and hasattr(vehicle, "fuelStatus"):
-            fuel_status = getattr(vehicle, "fuelStatus", None)
-            if fuel_status and isinstance(fuel_status, dict):
-                range_miles = fuel_status.get("distance", None)
-        last_updated = getattr(vehicle, "last_updated_at", None) or getattr(vehicle, "lastStatusDate", None)
-        if last_updated:
-            last_updated = str(last_updated)
-
-        status = {
-            "engineOn": engine_on,
-            "locked": locked,
-            "climateOn": climate_on,
-            "acSetTemperature": ac_set_temp,
-            "interiorTemperature": interior_temp,
-            "fuelLevel": fuel_level,
-            "rangeMiles": range_miles,
-            "lastUpdated": last_updated
+        data = {
+            "name": vehicle.name,
+            "model": vehicle.model,
+            "odometer_miles": getattr(vehicle, "_odometer_value", None),
+            "car_battery_percentage": getattr(vehicle, "car_battery_percentage", None),
+            "engine_is_running": getattr(vehicle, "engine_is_running", None),
+            "is_locked": getattr(vehicle, "is_locked", None),
+            "air_temperature_f": getattr(vehicle, "_air_temperature_value", None),
+            "air_control_is_on": getattr(vehicle, "air_control_is_on", None),
+            "fuel_level_percent": getattr(vehicle, "fuel_level", None),
+            "fuel_driving_range_miles": getattr(vehicle, "_fuel_driving_range_value", None),
+            "tire_pressure_warning": getattr(vehicle, "tire_pressure_all_warning_is_on", None),
+            "washer_fluid_warning": getattr(vehicle, "washer_fluid_warning_is_on", None),
+            "brake_fluid_warning": getattr(vehicle, "brake_fluid_warning_is_on", None),
+            "doors": {
+                "front_left_locked": getattr(vehicle, "front_left_door_is_locked", None),
+                "front_right_locked": getattr(vehicle, "front_right_door_is_locked", None),
+                "back_left_locked": getattr(vehicle, "back_left_door_is_locked", None),
+                "back_right_locked": getattr(vehicle, "back_right_door_is_locked", None),
+                "front_left_open": getattr(vehicle, "front_left_door_is_open", None),
+                "front_right_open": getattr(vehicle, "front_right_door_is_open", None),
+                "back_left_open": getattr(vehicle, "back_left_door_is_open", None),
+                "back_right_open": getattr(vehicle, "back_right_door_is_open", None),
+                "trunk_open": getattr(vehicle, "trunk_is_open", None),
+                "hood_open": getattr(vehicle, "hood_is_open", None)
+            },
+            "location": {
+                "lat": getattr(vehicle, "_location_latitude", None),
+                "lon": getattr(vehicle, "_location_longitude", None),
+                "last_set_time": str(getattr(vehicle, "_last_set_time", None)),
+            },
+            "dtc_codes": getattr(vehicle, "dtc_descriptions", None),
+            "last_updated": str(getattr(vehicle, "last_updated_at", None))
         }
-        return jsonify(status), 200
+        print("==== VEHICLE STATUS CLEAN ====")
+        print(data)
+        print("==============================")
+        return jsonify(data), 200
     except Exception as e:
+        print(f"Error in /vehicle_status: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/start_climate', methods=['POST'])
 def start_climate():
+    print("Received request to /start_climate")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
     try:
         vehicle_manager.update_all_vehicles_with_cached_state()
-        temp = request.json.get("set_temp", 63)
-        duration = request.json.get("duration", 10)
-        climate_options = ClimateRequestOptions(set_temp=temp, duration=duration)
+        climate_options = ClimateRequestOptions(
+            set_temp=72,  # puedes cambiar la temperatura aquí
+            duration=10
+        )
         result = vehicle_manager.start_climate(VEHICLE_ID, climate_options)
         return jsonify({"status": "Climate started", "result": result}), 200
     except Exception as e:
+        print(f"Error in /start_climate: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/stop_climate', methods=['POST'])
 def stop_climate():
+    print("Received request to /stop_climate")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
     try:
@@ -138,33 +130,12 @@ def stop_climate():
         result = vehicle_manager.stop_climate(VEHICLE_ID)
         return jsonify({"status": "Climate stopped", "result": result}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/start_heating', methods=['POST'])
-def start_heating():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        heating_options = ClimateRequestOptions(set_temp=80, duration=10)
-        result = vehicle_manager.start_climate(VEHICLE_ID, heating_options)
-        return jsonify({"status": "Heating started (80°F)", "result": result}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/lock_car', methods=['POST'])
-def lock_car():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        result = vehicle_manager.lock(VEHICLE_ID)
-        return jsonify({"status": "Car locked", "result": result}), 200
-    except Exception as e:
+        print(f"Error in /stop_climate: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/unlock_car', methods=['POST'])
 def unlock_car():
+    print("Received request to /unlock_car")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
     try:
@@ -172,91 +143,23 @@ def unlock_car():
         result = vehicle_manager.unlock(VEHICLE_ID)
         return jsonify({"status": "Car unlocked", "result": result}), 200
     except Exception as e:
+        print(f"Error in /unlock_car: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/start_engine', methods=['POST'])
-def start_engine():
+@app.route('/lock_car', methods=['POST'])
+def lock_car():
+    print("Received request to /lock_car")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
     try:
         vehicle_manager.update_all_vehicles_with_cached_state()
-        result = vehicle_manager.start_engine(VEHICLE_ID)
-        return jsonify({"status": "Engine started", "result": result}), 200
+        result = vehicle_manager.lock(VEHICLE_ID)
+        return jsonify({"status": "Car locked", "result": result}), 200
     except Exception as e:
+        print(f"Error in /lock_car: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/stop_engine', methods=['POST'])
-def stop_engine():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        result = vehicle_manager.stop_engine(VEHICLE_ID)
-        return jsonify({"status": "Engine stopped", "result": result}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/open_trunk', methods=['POST'])
-def open_trunk():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        result = vehicle_manager.open_trunk(VEHICLE_ID)
-        return jsonify({"status": "Trunk opened", "result": result}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/close_trunk', methods=['POST'])
-def close_trunk():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        result = vehicle_manager.close_trunk(VEHICLE_ID)
-        return jsonify({"status": "Trunk closed", "result": result}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/honk_horn', methods=['POST'])
-def honk_horn():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        result = vehicle_manager.honk(VEHICLE_ID)
-        return jsonify({"status": "Horn honked", "result": result}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/flash_lights', methods=['POST'])
-def flash_lights():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        result = vehicle_manager.flash_lights(VEHICLE_ID)
-        return jsonify({"status": "Lights flashed", "result": result}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/find_vehicle', methods=['GET'])
-def find_vehicle():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        vehicle = vehicle_manager.vehicles[VEHICLE_ID]
-        if hasattr(vehicle, "location") and vehicle.location:
-            location = vehicle.location
-            return jsonify({"status": "Success", "location": location}), 200
-        elif hasattr(vehicle, "get_location"):
-            location = vehicle.get_location()
-            return jsonify({"status": "Success", "location": location}), 200
-        else:
-            return jsonify({"error": "Location not available"}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# Puedes agregar más endpoints según tus necesidades
 
 if __name__ == "__main__":
     print("Starting Kia Vehicle Control API...")
