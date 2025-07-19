@@ -1,4 +1,5 @@
 import os
+import time
 from flask import Flask, request, jsonify
 from hyundai_kia_connect_api import VehicleManager, ClimateRequestOptions
 from hyundai_kia_connect_api.exceptions import AuthenticationError
@@ -82,7 +83,6 @@ def vehicle_status():
                 "climateOn": vs.get('airCtrl', None)
             }
         else:
-            # Fallback: atributos directos del objeto
             status = {
                 "locked": getattr(vehicle, "is_locked", None),
                 "engineOn": getattr(vehicle, "engine_is_running", None),
@@ -166,24 +166,25 @@ def lock_car():
         print(f"Error in /lock_car:\n{error_trace}")
         return jsonify({"error": error_trace}), 500
 
-@app.route('/open_trunk', methods=['POST'])
-def open_trunk():
-    print("Received request to /open_trunk")
+# --- ENDPOINT PARA BAÚL AFTERMARKET ---
+@app.route('/aftermarket_trunk', methods=['POST'])
+def aftermarket_trunk():
+    print("Received request to /aftermarket_trunk")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
 
     results = []
     try:
-        # Envía tres señales de unlock seguidas (¡sin delay!)
         for i in range(3):
             result = vehicle_manager.unlock(VEHICLE_ID)
             results.append(result)
             print(f"Unlock command {i+1} sent.")
-        return jsonify({"status": "Trunk opening command sent (triple unlock, no delay)", "results": results}), 200
+            time.sleep(1)  # Un segundo entre cada unlock
+        return jsonify({"status": "Aftermarket trunk opening command sent (triple unlock, 1s delay)", "results": results}), 200
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"Error in /open_trunk:\n{error_trace}")
+        print(f"Error in /aftermarket_trunk:\n{error_trace}")
         return jsonify({"error": error_trace}), 500
 
 @app.route('/start_heating', methods=['POST'])
