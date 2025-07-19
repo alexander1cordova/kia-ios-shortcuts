@@ -173,6 +173,23 @@ def open_trunk():
     except Exception as e:
         print(f"Error in /open_trunk: {e}")
         return jsonify({"error": str(e)}), 500
+        
+        @app.route('/start_heating', methods=['POST'])
+def start_heating():
+    print("Received request to /start_heating")
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        climate_options = ClimateRequestOptions(
+            set_temp=80,  # 80°F para calefacción
+            duration=10
+        )
+        result = vehicle_manager.start_climate(VEHICLE_ID, climate_options)
+        return jsonify({"status": "Heating started (80°F)", "result": result}), 200
+    except Exception as e:
+        print(f"Error in /start_heating: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     print("Starting Kia Vehicle Control API...")
