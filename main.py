@@ -54,7 +54,6 @@ def root():
 @app.route('/vehicle_status', methods=['GET'])
 def vehicle_status():
     print("Received request to /vehicle_status")
-
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
 
@@ -71,15 +70,16 @@ def vehicle_status():
             fuel = vs.get('fuelLevel', None)
             engine = vs.get('engine', None)
             locked = vs.get('doorLock', None)
-            date = rpt.get('reportDate', {}).get('utc', None)
+            odometer = vs.get('odometer', {}).get('value', None)
+            # date = rpt.get('reportDate', {}).get('utc', None)  # ELIMINADO
 
             status = {
                 "locked": locked,
-                "lastUpdated": date,
                 "engineOn": engine,
                 "fuelLevel": fuel,
                 "interiorTemperature": climate.get('airTemp', {}).get('value', None),
                 "rangeMiles": distance.get('value', None),
+                "odometer": odometer,
                 "acSetTemperature": None,
                 "climateOn": vs.get('airCtrl', None)
             }
@@ -87,11 +87,11 @@ def vehicle_status():
             # Fallback: atributos directos del objeto
             status = {
                 "locked": getattr(vehicle, "is_locked", None),
-                "lastUpdated": str(getattr(vehicle, "last_updated_at", None)),
                 "engineOn": getattr(vehicle, "engine_is_running", None),
                 "fuelLevel": getattr(vehicle, "fuel_level", None),
                 "interiorTemperature": getattr(vehicle, "interior_temperature", None),
                 "rangeMiles": getattr(vehicle, "range_miles", None),
+                "odometer": getattr(vehicle, "odometer_value", None),
                 "acSetTemperature": getattr(vehicle, "climate_temperature", None),
                 "climateOn": getattr(vehicle, "is_climate_on", None)
             }
@@ -154,7 +154,6 @@ def lock_car():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- ENDPOINT PARA ABRIR PUERTA TRASERA CON DESBLOQUEO TRIPLE ---
 @app.route('/open_trunk', methods=['POST'])
 def open_trunk():
     print("Received request to /open_trunk")
@@ -162,19 +161,18 @@ def open_trunk():
         return jsonify({"error": "Unauthorized"}), 403
 
     try:
-        # Enviar señal de desbloqueo tres veces con un pequeño delay
         results = []
         for i in range(3):
             result = vehicle_manager.unlock(VEHICLE_ID)
             results.append(result)
             print(f"Unlock command {i+1} sent.")
-            time.sleep(1)  # 1 segundo entre comandos (ajusta si necesitas más/menos delay)
+            time.sleep(1)
         return jsonify({"status": "Trunk opening command sent (triple unlock)", "results": results}), 200
     except Exception as e:
         print(f"Error in /open_trunk: {e}")
         return jsonify({"error": str(e)}), 500
-        
-        @app.route('/start_heating', methods=['POST'])
+
+@app.route('/start_heating', methods=['POST'])
 def start_heating():
     print("Received request to /start_heating")
     if request.headers.get("Authorization") != SECRET_KEY:
