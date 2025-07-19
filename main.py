@@ -5,7 +5,6 @@ from hyundai_kia_connect_api.exceptions import AuthenticationError
 
 app = Flask(__name__)
 
-# Get credentials from environment variables
 USERNAME = os.environ.get('KIA_USERNAME')
 PASSWORD = os.environ.get('KIA_PASSWORD')
 PIN = os.environ.get('KIA_PIN')
@@ -15,10 +14,9 @@ VEHICLE_ID = os.environ.get("VEHICLE_ID")
 if not USERNAME or not PASSWORD or not PIN or not SECRET_KEY:
     raise ValueError("Missing one or more required environment variables.")
 
-# Initialize Vehicle Manager
 vehicle_manager = VehicleManager(
-    region=3,  # North America region
-    brand=1,   # KIA brand
+    region=3,  # North America
+    brand=1,   # KIA
     username=USERNAME,
     password=PASSWORD,
     pin=str(PIN)
@@ -52,34 +50,6 @@ def log_request_info():
 def root():
     return jsonify({"status": "Welcome to the Kia Vehicle Control API"}), 200
 
-# List vehicles endpoint
-@app.route('/list_vehicles', methods=['GET'])
-def list_vehicles():
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        vehicles = vehicle_manager.vehicles
-
-        if not vehicles:
-            return jsonify({"error": "No vehicles found"}), 404
-
-        vehicle_list = [
-            {
-                "name": v.name,
-                "id": v.id,
-                "model": v.model,
-                "year": v.year
-            }
-            for v in vehicles.values()
-        ]
-
-        return jsonify({"status": "Success", "vehicles": vehicle_list}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# Vehicle status endpoint (USANDO vehicleStatusRpt REAL)
 @app.route('/vehicle_status', methods=['GET'])
 def vehicle_status():
     print("Received request to /vehicle_status")
@@ -90,7 +60,6 @@ def vehicle_status():
     try:
         vehicle_manager.update_all_vehicles_with_cached_state()
         vehicle = vehicle_manager.vehicles[VEHICLE_ID]
-
         rpt = getattr(vehicle, 'vehicleStatusRpt', None)
         status = {}
 
@@ -110,11 +79,21 @@ def vehicle_status():
                 "fuelLevel": fuel,
                 "interiorTemperature": climate.get('airTemp', {}).get('value', None),
                 "rangeMiles": distance.get('value', None),
-                "acSetTemperature": None,  # No aparece en tu dict, puedes omitir si quieres
+                "acSetTemperature": None,
                 "climateOn": vs.get('airCtrl', None)
             }
         else:
-            status = {"error": "vehicleStatusRpt not found"}
+            # Fallback: atributos directos del objeto
+            status = {
+                "locked": getattr(vehicle, "is_locked", None),
+                "lastUpdated": str(getattr(vehicle, "last_updated_at", None)),
+                "engineOn": getattr(vehicle, "engine_is_running", None),
+                "fuelLevel": getattr(vehicle, "fuel_level", None),
+                "interiorTemperature": getattr(vehicle, "interior_temperature", None),
+                "rangeMiles": getattr(vehicle, "range_miles", None),
+                "acSetTemperature": getattr(vehicle, "climate_temperature", None),
+                "climateOn": getattr(vehicle, "is_climate_on", None)
+            }
 
         print(status)
         return jsonify(status), 200
@@ -122,7 +101,6 @@ def vehicle_status():
         print(f"Error in /vehicle_status: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Start climate endpoint
 @app.route('/start_climate', methods=['POST'])
 def start_climate():
     if request.headers.get("Authorization") != SECRET_KEY:
@@ -139,7 +117,6 @@ def start_climate():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Stop climate endpoint
 @app.route('/stop_climate', methods=['POST'])
 def stop_climate():
     if request.headers.get("Authorization") != SECRET_KEY:
@@ -152,7 +129,6 @@ def stop_climate():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Unlock car endpoint
 @app.route('/unlock_car', methods=['POST'])
 def unlock_car():
     if request.headers.get("Authorization") != SECRET_KEY:
@@ -165,7 +141,6 @@ def unlock_car():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Lock car endpoint
 @app.route('/lock_car', methods=['POST'])
 def lock_car():
     if request.headers.get("Authorization") != SECRET_KEY:
