@@ -88,7 +88,7 @@ def vehicle_status():
                 "engineOn": getattr(vehicle, "engine_is_running", None),
                 "fuelLevel": getattr(vehicle, "fuel_level", None),
                 "interiorTemperature": getattr(vehicle, "interior_temperature", None),
-                "rangeMiles": getattr(vehicle, "range_miles", None),
+                "rangeMiles": getattr(vehicle, "fuel_driving_range", None),
                 "odometer": getattr(vehicle, "odometer_value", None),
                 "acSetTemperature": getattr(vehicle, "climate_temperature", None),
                 "climateOn": getattr(vehicle, "is_climate_on", None)
@@ -166,7 +166,6 @@ def lock_car():
         print(f"Error in /lock_car:\n{error_trace}")
         return jsonify({"error": error_trace}), 500
 
-# --- ENDPOINT PARA BAÚL AFTERMARKET ---
 @app.route('/aftermarket_trunk', methods=['POST'])
 def aftermarket_trunk():
     print("Received request to /aftermarket_trunk")
