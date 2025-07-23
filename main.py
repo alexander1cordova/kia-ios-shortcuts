@@ -58,41 +58,20 @@ def vehicle_status():
         return jsonify({"error": "Unauthorized"}), 403
 
     try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        vehicle = vehicle_manager.vehicles[VEHICLE_ID]
-        rpt = getattr(vehicle, 'vehicleStatusRpt', None)
-        status = {}
+        vehicle_manager.force_refresh_vehicles_states(VEHICLE_ID)
+        vehicle = vehicle_manager.get_vehicle(VEHICLE_ID)
 
-        if rpt:
-            vs = rpt.get('vehicleStatus', {})
-            climate = vs.get('climate', {})
-            distance = vs.get('distanceToEmpty', {})
-            fuel = vs.get('fuelLevel', None)
-            engine = vs.get('engine', None)
-            locked = vs.get('doorLock', None)
-            odometer = vs.get('odometer', {}).get('value', None)
-
-            status = {
-                "locked": locked,
-                "engineOn": engine,
-                "fuelLevel": fuel,
-                "interiorTemperature": climate.get('airTemp', {}).get('value', None),
-                "rangeMiles": distance.get('value', None),
-                "odometer": odometer,
-                "acSetTemperature": None,
-                "climateOn": vs.get('airCtrl', None)
-            }
-        else:
-            status = {
-                "locked": getattr(vehicle, "is_locked", None),
-                "engineOn": getattr(vehicle, "engine_is_running", None),
-                "fuelLevel": getattr(vehicle, "fuel_level", None),
-                "interiorTemperature": getattr(vehicle, "interior_temperature", None),
-                "rangeMiles": getattr(vehicle, "fuel_driving_range", None),
-                "odometer": getattr(vehicle, "odometer_value", None),
-                "acSetTemperature": getattr(vehicle, "climate_temperature", None),
-                "climateOn": getattr(vehicle, "is_climate_on", None)
-            }
+        status = {
+            "locked": vehicle.is_locked,
+            "engineOn": vehicle.engine_is_running,
+            "fuelLevel": vehicle.fuel_level,
+            "interiorTemperature": vehicle.air_temperature[0] if vehicle.air_temperature else None,
+            "temperatureUnit": vehicle.air_temperature[1] if vehicle.air_temperature else None,
+            "rangeMiles": vehicle.fuel_driving_range,
+            "odometer": vehicle.odometer_value,
+            "acSetTemperature": vehicle.climate_temperature,
+            "climateOn": vehicle.is_climate_on
+        }
 
         print(status)
         return jsonify(status), 200
@@ -178,7 +157,7 @@ def aftermarket_trunk():
             result = vehicle_manager.unlock(VEHICLE_ID)
             results.append(result)
             print(f"Unlock command {i+1} sent.")
-            time.sleep(1)  # Un segundo entre cada unlock
+            time.sleep(1)
         return jsonify({"status": "Aftermarket trunk opening command sent (triple unlock, 1s delay)", "results": results}), 200
     except Exception as e:
         import traceback
