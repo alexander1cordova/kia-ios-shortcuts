@@ -1,6 +1,5 @@
 import os
 import time
-import json
 from flask import Flask, request, jsonify
 from hyundai_kia_connect_api import VehicleManager, ClimateRequestOptions
 from hyundai_kia_connect_api.exceptions import AuthenticationError
@@ -17,8 +16,8 @@ if not USERNAME or not PASSWORD or not PIN or not SECRET_KEY:
     raise ValueError("Missing one or more required environment variables.")
 
 vehicle_manager = VehicleManager(
-    region=3,  # North America
-    brand=1,   # KIA
+    region=3,
+    brand=1,
     username=USERNAME,
     password=PASSWORD,
     pin=str(PIN)
@@ -69,12 +68,9 @@ def vehicle_status():
         return jsonify({"error": "Unauthorized"}), 403
 
     try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
+        vehicle_manager.update_all_vehicles_with_cached_state(force_refresh_vehicles_states=True)
         vehicle = vehicle_manager.vehicles[VEHICLE_ID]
         rpt = getattr(vehicle, 'vehicleStatusRpt', None)
-
-        # Log the raw vehicle status for debugging
-        print("Raw vehicleStatusRpt:\n", json.dumps(rpt, indent=2))
 
         if rpt:
             vs = rpt.get('vehicleStatus', {})
