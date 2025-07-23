@@ -43,6 +43,16 @@ if not VEHICLE_ID:
     VEHICLE_ID = next(iter(vehicle_manager.vehicles.keys()))
     print(f"No VEHICLE_ID provided. Using first vehicle: {VEHICLE_ID}")
 
+def parse_temperature(temp_obj):
+    try:
+        if isinstance(temp_obj, dict):
+            val = temp_obj.get('value')
+            if val is not None:
+                return float(val)
+        return None
+    except:
+        return None
+
 @app.before_request
 def log_request_info():
     print(f"Incoming request: {request.method} {request.url}")
@@ -53,14 +63,14 @@ def root():
 
 @app.route('/vehicle_status', methods=['GET'])
 def vehicle_status():
+    print("Received request to /vehicle_status")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
+
     try:
-        vehicle_manager.update_all_vehicles_with_cached_state(force_refresh_vehicles_states=True)
+        vehicle_manager.update_all_vehicles_with_cached_state()
         vehicle = vehicle_manager.vehicles[VEHICLE_ID]
         rpt = getattr(vehicle, 'vehicleStatusRpt', None)
-
-        status = {}
 
         if rpt:
             vs = rpt.get('vehicleStatus', {})
@@ -71,24 +81,12 @@ def vehicle_status():
             locked = vs.get('doorLock', None)
             odometer = vs.get('odometer', {}).get('value', None)
 
-            interior_temp = None
-            if isinstance(climate.get('airTemp'), dict):
-                interior_temp = climate['airTemp'].get('value')
-            elif isinstance(climate.get('airTemp'), (int, float)):
-                interior_temp = climate['airTemp']
-
-            ac_temp = None
-            if isinstance(climate.get('heatingTemp'), dict):
-                ac_temp = climate['heatingTemp'].get('value')
-            elif isinstance(climate.get('heatingTemp'), (int, float)):
-                ac_temp = climate['heatingTemp']
-
             status = {
                 "locked": locked,
                 "engineOn": engine,
                 "fuelLevel": fuel,
-                "interiorTemperature": interior_temp,
-                "acSetTemperature": ac_temp,
+                "interiorTemperature": parse_temperature(climate.get('airTemp')),
+                "acSetTemperature": parse_temperature(climate.get('heatingTemp')),
                 "rangeMiles": distance.get('value', None),
                 "odometer": odometer,
                 "climateOn": vs.get('airCtrl', None)
@@ -105,10 +103,13 @@ def vehicle_status():
                 "climateOn": getattr(vehicle, "is_climate_on", None)
             }
 
+        print(status)
         return jsonify(status), 200
     except Exception as e:
         import traceback
-        return jsonify({"error": traceback.format_exc()}), 500
+        error_trace = traceback.format_exc()
+        print(f"Error in /vehicle_status:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
 
 @app.route('/start_climate', methods=['POST'])
 def start_climate():
@@ -161,12 +162,14 @@ def lock_car():
 
 @app.route('/aftermarket_trunk', methods=['POST'])
 def aftermarket_trunk():
+    print("Received request to /aftermarket_trunk")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
     try:
         results = []
-        for _ in range(3):
-            results.append(vehicle_manager.unlock(VEHICLE_ID))
+        for i in range(3):
+            result = vehicle_manager.unlock(VEHICLE_ID)
+            results.append(result)
             time.sleep(1)
         return jsonify({"status": "Aftermarket trunk opened", "results": results}), 200
     except Exception as e:
@@ -175,6 +178,7 @@ def aftermarket_trunk():
 
 @app.route('/start_heating', methods=['POST'])
 def start_heating():
+    print("Received request to /start_heating")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
     try:
@@ -188,6 +192,7 @@ def start_heating():
 
 @app.route('/find_my_car', methods=['POST'])
 def find_my_car():
+    print("Received request to /find_my_car")
     if request.headers.get("Authorization") != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
     try:
@@ -199,4 +204,5 @@ def find_my_car():
         return jsonify({"error": traceback.format_exc()}), 500
 
 if __name__ == "__main__":
+    print("Starting Kia Vehicle Control API...")
     app.run(host="0.0.0.0", port=8080)
