@@ -76,18 +76,25 @@ def vehicle_status():
                 "locked": locked,
                 "engineOn": engine,
                 "fuelLevel": fuel,
-                "interiorTemperature": climate.get('airTemp', {}).get('value', None),
+                "interiorTemperature": {
+                    "value": climate.get('airTemp', {}).get('value', None),
+                    "unit": "F"
+                },
                 "rangeMiles": distance.get('value', None),
                 "odometer": odometer,
                 "acSetTemperature": None,
                 "climateOn": vs.get('airCtrl', None)
             }
         else:
+            air_temp = getattr(vehicle, "air_temperature", None)
             status = {
                 "locked": getattr(vehicle, "is_locked", None),
                 "engineOn": getattr(vehicle, "engine_is_running", None),
                 "fuelLevel": getattr(vehicle, "fuel_level", None),
-                "interiorTemperature": getattr(vehicle, "interior_temperature", None),
+                "interiorTemperature": {
+                    "value": air_temp[0] if air_temp else None,
+                    "unit": air_temp[1] if air_temp else "F"
+                },
                 "rangeMiles": getattr(vehicle, "range_miles", None),
                 "odometer": getattr(vehicle, "odometer_value", None),
                 "acSetTemperature": getattr(vehicle, "climate_temperature", None),
@@ -166,27 +173,6 @@ def lock_car():
         print(f"Error in /lock_car:\n{error_trace}")
         return jsonify({"error": error_trace}), 500
 
-# --- ENDPOINT PARA BAÚL AFTERMARKET ---
-@app.route('/aftermarket_trunk', methods=['POST'])
-def aftermarket_trunk():
-    print("Received request to /aftermarket_trunk")
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    results = []
-    try:
-        for i in range(3):
-            result = vehicle_manager.unlock(VEHICLE_ID)
-            results.append(result)
-            print(f"Unlock command {i+1} sent.")
-            time.sleep(1)  # Un segundo entre cada unlock
-        return jsonify({"status": "Aftermarket trunk opening command sent (triple unlock, 1s delay)", "results": results}), 200
-    except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"Error in /aftermarket_trunk:\n{error_trace}")
-        return jsonify({"error": error_trace}), 500
-
 @app.route('/start_heating', methods=['POST'])
 def start_heating():
     print("Received request to /start_heating")
@@ -204,6 +190,21 @@ def start_heating():
         import traceback
         error_trace = traceback.format_exc()
         print(f"Error in /start_heating:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
+
+@app.route('/find_my_car', methods=['POST'])
+def find_my_car():
+    print("Received request to /find_my_car")
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.find_my_car(VEHICLE_ID)
+        return jsonify({"status": "Find My Car activated", "result": result}), 200
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /find_my_car:\n{error_trace}")
         return jsonify({"error": error_trace}), 500
 
 if __name__ == "__main__":
