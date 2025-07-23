@@ -66,23 +66,21 @@ def vehicle_status():
         if rpt:
             vs = rpt.get('vehicleStatus', {})
             climate = vs.get('climate', {})
+            distance = vs.get('distanceToEmpty', {})
             fuel = vs.get('fuelLevel', None)
             engine = vs.get('engine', None)
             locked = vs.get('doorLock', None)
             odometer = vs.get('odometer', {}).get('value', None)
-            range_miles = vs.get('distanceToEmpty', {}).get('value', None)
-            air_temp = climate.get('airTemp', {})
-            climate_set = air_temp.get('hvacTempType', None)
-            interior_temp = air_temp.get('value', None)
+            ac_temp = climate.get('airTemp', {}).get('value', None)
 
             status = {
                 "locked": locked,
                 "engineOn": engine,
                 "fuelLevel": fuel,
-                "interiorTemperature": interior_temp,
-                "rangeMiles": range_miles,
+                "interiorTemperature": ac_temp if isinstance(ac_temp, (int, float, str)) else None,
+                "rangeMiles": distance.get('value', None),
                 "odometer": odometer,
-                "acSetTemperature": climate_set,
+                "acSetTemperature": ac_temp if isinstance(ac_temp, (int, float, str)) else None,
                 "climateOn": vs.get('airCtrl', None)
             }
         else:
@@ -105,9 +103,123 @@ def vehicle_status():
         print(f"Error in /vehicle_status:\n{error_trace}")
         return jsonify({"error": error_trace}), 500
 
-# Los demás endpoints se mantienen tal como ya están definidos...
-# start_climate, stop_climate, lock_car, unlock_car, aftermarket_trunk, start_heating
-# No se repiten aquí porque no fueron modificados y ya funcionan en tu versión actual.
+@app.route('/start_climate', methods=['POST'])
+def start_climate():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        climate_options = ClimateRequestOptions(
+            set_temp=63,
+            duration=10
+        )
+        result = vehicle_manager.start_climate(VEHICLE_ID, climate_options)
+        return jsonify({"status": "Climate started", "result": result}), 200
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /start_climate:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
+
+@app.route('/stop_climate', methods=['POST'])
+def stop_climate():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.stop_climate(VEHICLE_ID)
+        return jsonify({"status": "Climate stopped", "result": result}), 200
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /stop_climate:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
+
+@app.route('/unlock_car', methods=['POST'])
+def unlock_car():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.unlock(VEHICLE_ID)
+        return jsonify({"status": "Car unlocked", "result": result}), 200
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /unlock_car:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
+
+@app.route('/lock_car', methods=['POST'])
+def lock_car():
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.lock(VEHICLE_ID)
+        return jsonify({"status": "Car locked", "result": result}), 200
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /lock_car:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
+
+@app.route('/aftermarket_trunk', methods=['POST'])
+def aftermarket_trunk():
+    print("Received request to /aftermarket_trunk")
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    results = []
+    try:
+        for i in range(3):
+            result = vehicle_manager.unlock(VEHICLE_ID)
+            results.append(result)
+            print(f"Unlock command {i+1} sent.")
+            time.sleep(1)
+        return jsonify({"status": "Aftermarket trunk opening command sent (triple unlock, 1s delay)", "results": results}), 200
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /aftermarket_trunk:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
+
+@app.route('/start_heating', methods=['POST'])
+def start_heating():
+    print("Received request to /start_heating")
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        climate_options = ClimateRequestOptions(
+            set_temp=80,
+            duration=10
+        )
+        result = vehicle_manager.start_climate(VEHICLE_ID, climate_options)
+        return jsonify({"status": "Heating started (80°F)", "result": result}), 200
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /start_heating:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
+
+@app.route('/find_my_car', methods=['POST'])
+def find_my_car():
+    print("Received request to /find_my_car")
+    if request.headers.get("Authorization") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        vehicle_manager.update_all_vehicles_with_cached_state()
+        result = vehicle_manager.find_my_car(VEHICLE_ID)
+        return jsonify({"status": "Find My Car triggered (horn and lights)", "result": result}), 200
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in /find_my_car:\n{error_trace}")
+        return jsonify({"error": error_trace}), 500
 
 if __name__ == "__main__":
     print("Starting Kia Vehicle Control API...")
