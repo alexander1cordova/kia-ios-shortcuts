@@ -190,19 +190,6 @@ def start_heating():
         import traceback
         return jsonify({"error": traceback.format_exc()}), 500
 
-@app.route('/find_my_car', methods=['POST'])
-def find_my_car():
-    print("Received request to /find_my_car")
-    if request.headers.get("Authorization") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
-    try:
-        vehicle_manager.update_all_vehicles_with_cached_state()
-        result = vehicle_manager.find_vehicle(VEHICLE_ID)
-        return jsonify({"status": "Find My Car activated", "result": result}), 200
-    except Exception as e:
-        import traceback
-        return jsonify({"error": traceback.format_exc()}), 500
-
 if __name__ == "__main__":
     print("Starting Kia Vehicle Control API...")
     app.run(host="0.0.0.0", port=8080)
