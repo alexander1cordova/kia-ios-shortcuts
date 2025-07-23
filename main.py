@@ -1,5 +1,6 @@
 import os
 import time
+import json
 from flask import Flask, request, jsonify
 from hyundai_kia_connect_api import VehicleManager, ClimateRequestOptions
 from hyundai_kia_connect_api.exceptions import AuthenticationError
@@ -71,6 +72,9 @@ def vehicle_status():
         vehicle_manager.update_all_vehicles_with_cached_state()
         vehicle = vehicle_manager.vehicles[VEHICLE_ID]
         rpt = getattr(vehicle, 'vehicleStatusRpt', None)
+
+        # Log the raw vehicle status for debugging
+        print("Raw vehicleStatusRpt:\n", json.dumps(rpt, indent=2))
 
         if rpt:
             vs = rpt.get('vehicleStatus', {})
