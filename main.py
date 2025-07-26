@@ -117,7 +117,7 @@ def start_climate():
         return jsonify({"error": "Unauthorized"}), 403
     try:
         vehicle_manager.update_all_vehicles_with_cached_state()
-        climate_options = ClimateRequestOptions(set_temp=63, duration=10)
+        climate_options = ClimateRequestOptions(set_temp=62, duration=10)
         result = vehicle_manager.start_climate(VEHICLE_ID, climate_options)
         return jsonify({"status": "Climate started", "result": result}), 200
     except Exception as e:
